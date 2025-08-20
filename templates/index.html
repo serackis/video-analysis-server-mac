@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Analysis Server - Home</title>
+    
+    <!-- Bootstrap CSS with fallback -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" onerror="this.onerror=null; this.href='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css';">
+    
+    <!-- Font Awesome with fallback -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" onerror="this.onerror=null; this.href='https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.0.0/css/all.min.css';">
+    
+    <!-- Local CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    
+    <!-- Fallback styles if external resources fail -->
+    <style>
+        /* Basic fallback styles if Bootstrap fails to load */
+        .fallback-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .fallback-card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; background: #fff; }
+        .fallback-btn { 
+            background: #007bff; color: white; border: none; padding: 10px 20px; 
+            border-radius: 4px; cursor: pointer; margin: 5px;
+        }
+        .fallback-btn:hover { background: #0056b3; }
+        .fallback-input { 
+            width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; 
+            margin-bottom: 10px; box-sizing: border-box;
+        }
+        .fallback-nav { background: #333; color: white; padding: 15px; }
+        .fallback-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        
+        /* Hide fallback elements when Bootstrap is loaded */
+        .bootstrap-loaded .fallback-container,
+        .bootstrap-loaded .fallback-card,
+        .bootstrap-loaded .fallback-btn,
+        .bootstrap-loaded .fallback-input,
+        .bootstrap-loaded .fallback-nav,
+        .bootstrap-loaded .fallback-grid { display: none; }
+    </style>
+</head>
+<body>
+    <!-- Fallback Navigation -->
+    <div class="fallback-nav">
+        <div class="fallback-container">
+            <h2>Video Analysis Server</h2>
+        </div>
+    </div>
+
+    <!-- Bootstrap Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-video me-2"></i>
+                Video Analysis Server
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">
+                            <i class="fas fa-home me-1"></i>Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/cameras">
+                            <i class="fas fa-camera me-1"></i>Cameras
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/upload">
+                            <i class="fas fa-cloud-upload-alt me-1"></i>Upload & Process
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/library">
+                            <i class="fas fa-video me-1"></i>Video Library
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-5">
+        <!-- Welcome Header -->
+        <div class="row mb-5">
+            <div class="col-12 text-center">
+                <h1 class="display-4 text-primary mb-3">
+                    <i class="fas fa-video me-3"></i>
+                    Video Analysis Server
+                </h1>
+                <p class="lead text-muted">
+                    Professional video analysis with AI-powered face detection, license plate recognition, and privacy protection
+                </p>
+            </div>
+        </div>
+
+        <!-- Main Functionality Cards -->
+        <div class="row g-4">
+            <!-- Camera Configuration Card -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon mb-3">
+                            <i class="fas fa-camera fa-3x text-primary"></i>
+                        </div>
+                        <h4 class="card-title mb-3">Camera Configuration</h4>
+                        <p class="card-text text-muted">
+                            Configure RTSP cameras, manage active streams, and monitor camera status in real-time.
+                        </p>
+                        <div class="feature-stats mb-3">
+                            <small class="text-muted">
+                                <i class="fas fa-circle text-success me-1"></i>
+                                <span id="activeCamerasCount">0</span> active cameras
+                            </small>
+                        </div>
+                        <a href="/cameras" class="btn btn-primary btn-lg w-100">
+                            <i class="fas fa-cog me-2"></i>Manage Cameras
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Upload & Processing Card -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon mb-3">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-success"></i>
+                        </div>
+                        <h4 class="card-title mb-3">Video Upload & Processing</h4>
+                        <p class="card-text text-muted">
+                            Upload videos for analysis, apply depersonalization, and process with AI detection.
+                        </p>
+                        <div class="feature-stats mb-3">
+                            <small class="text-muted">
+                                <i class="fas fa-video me-1"></i>
+                                <span id="uploadedVideosCount">0</span> videos uploaded
+                            </small>
+                        </div>
+                        <a href="/upload" class="btn btn-success btn-lg w-100">
+                            <i class="fas fa-upload me-2"></i>Upload & Process
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Library Card -->
+            <div class="col-lg-4 col-md-6">
+                <div class="card h-100 feature-card">
+                    <div class="card-body text-center p-4">
+                        <div class="feature-icon mb-3">
+                            <i class="fas fa-video fa-3x text-info"></i>
+                        </div>
+                        <h4 class="card-title mb-3">Video Library</h4>
+                        <p class="card-text text-muted">
+                            Browse processed videos, view analysis results, and manage your video collection.
+                        </p>
+                        <div class="feature-stats mb-3">
+                            <small class="text-muted">
+                                <i class="fas fa-check-circle me-1"></i>
+                                <span id="processedVideosCount">0</span> videos processed
+                            </small>
+                        </div>
+                        <a href="/library" class="btn btn-info btn-lg w-100">
+                            <i class="fas fa-folder-open me-2"></i>Browse Library
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Stats Row -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            System Overview
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-md-3 col-6 mb-3">
+                                <div class="stat-item">
+                                    <h3 class="text-primary" id="totalCameras">0</h3>
+                                    <p class="text-muted mb-0">Total Cameras</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <div class="stat-item">
+                                    <h3 class="text-success" id="totalVideos">0</h3>
+                                    <p class="text-muted mb-0">Total Videos</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <div class="stat-item">
+                                    <h3 class="text-info" id="totalProcessed">0</h3>
+                                    <p class="text-muted mb-0">Processed Videos</p>
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-6 mb-3">
+                                <div class="stat-item">
+                                    <h3 class="text-warning" id="systemStatus">Online</h3>
+                                    <p class="text-muted mb-0">System Status</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="fas fa-clock me-2"></i>
+                            Recent Activity
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentActivity">
+                            <p class="text-muted text-center">Loading recent activity...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-overlay" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS with fallback -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js';"></script>
+    
+    <!-- Local JavaScript -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <!-- Fallback JavaScript -->
+    <script>
+        // Check if Bootstrap loaded successfully
+        window.addEventListener('load', function() {
+            if (typeof bootstrap !== 'undefined') {
+                document.body.classList.add('bootstrap-loaded');
+            }
+        });
+
+        // Load dashboard data
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDashboardData();
+        });
+
+        async function loadDashboardData() {
+            try {
+                // Load camera count
+                const camerasResponse = await fetch('/api/cameras');
+                const cameras = await camerasResponse.json();
+                document.getElementById('activeCamerasCount').textContent = cameras.length;
+                document.getElementById('totalCameras').textContent = cameras.length;
+
+                // Load video counts
+                const videosResponse = await fetch('/api/uploaded-videos');
+                const videos = await videosResponse.json();
+                document.getElementById('uploadedVideosCount').textContent = videos.length;
+                document.getElementById('totalVideos').textContent = videos.length;
+
+                // Load processed videos count
+                const processedResponse = await fetch('/api/processed-videos');
+                const processed = await processedResponse.json();
+                document.getElementById('processedVideosCount').textContent = processed.length;
+                document.getElementById('totalProcessed').textContent = processed.length;
+
+                // Update recent activity
+                updateRecentActivity(videos, processed);
+            } catch (error) {
+                console.error('Error loading dashboard data:', error);
+            }
+        }
+
+        function updateRecentActivity(videos, processed) {
+            const recentActivity = document.getElementById('recentActivity');
+            const allVideos = [...videos, ...processed];
+            
+            if (allVideos.length === 0) {
+                recentActivity.innerHTML = '<p class="text-muted text-center">No recent activity</p>';
+                return;
+            }
+
+            // Sort by date and take latest 5
+            const sortedVideos = allVideos
+                .sort((a, b) => new Date(b.uploaded_at || b.processed_at) - new Date(a.uploaded_at || a.processed_at))
+                .slice(0, 5);
+
+            const activityHTML = sortedVideos.map(video => {
+                const date = new Date(video.uploaded_at || video.processed_at);
+                const isProcessed = video.processed_at;
+                return `
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-${isProcessed ? 'check-circle text-success' : 'upload text-primary'} me-2"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <strong>${video.original_filename || video.filename}</strong>
+                            <br>
+                            <small class="text-muted">
+                                ${isProcessed ? 'Processed' : 'Uploaded'} on ${date.toLocaleDateString()} at ${date.toLocaleTimeString()}
+                            </small>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            recentActivity.innerHTML = activityHTML;
+        }
+    </script>
+</body>
+</html> 
