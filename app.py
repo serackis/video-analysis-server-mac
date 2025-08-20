@@ -6,6 +6,7 @@ import easyocr
 import json
 import threading
 import time
+import hashlib
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -29,6 +30,10 @@ os.makedirs('static/thumbnails', exist_ok=True)
 # Global variables for video processing
 active_streams = {}
 processing_threads = {}
+
+# Progress tracking for video processing
+processing_progress = {}
+processing_lock = {}  # Lock to prevent duplicate processing
 
 # Initialize EasyOCR reader for license plate detection
 reader = easyocr.Reader(['en'])
@@ -256,6 +261,71 @@ def save_video_metadata(filename, camera_id, duration, faces_detected, plates_de
     conn.commit()
     conn.close()
 
+def cleanup_orphaned_entries():
+    """Clean up database entries for files that no longer exist or have corrupted data"""
+    conn = sqlite3.connect('video_analysis.db')
+    cursor = conn.cursor()
+    
+    try:
+        # Clean up corrupted uploaded videos (null values for required fields)
+        cursor.execute('DELETE FROM uploaded_videos WHERE file_path IS NULL OR original_filename IS NULL OR stored_filename IS NULL')
+        corrupted_uploaded = cursor.rowcount
+        if corrupted_uploaded > 0:
+            print(f"Cleaned up {corrupted_uploaded} corrupted uploaded video entries")
+        
+        # Clean up corrupted processed videos (null values for required fields)
+        cursor.execute('DELETE FROM processed_videos WHERE file_path IS NULL OR uploaded_video_id IS NULL OR processed_filename IS NULL')
+        corrupted_processed = cursor.rowcount
+        if corrupted_processed > 0:
+            print(f"Cleaned up {corrupted_uploaded} corrupted processed video entries")
+        
+        # Clean up duplicate uploaded videos (keep only the most recent)
+        cursor.execute('''
+            DELETE FROM uploaded_videos 
+            WHERE id NOT IN (
+                SELECT MAX(id) 
+                FROM uploaded_videos 
+                GROUP BY original_filename, file_size
+            )
+        ''')
+        duplicate_uploaded = cursor.rowcount
+        if duplicate_uploaded > 0:
+            print(f"Cleaned up {duplicate_uploaded} duplicate uploaded video entries")
+        
+        # Clean up orphaned uploaded videos (files don't exist)
+        cursor.execute('SELECT id, file_path FROM uploaded_videos')
+        uploaded_videos = cursor.fetchall()
+        
+        orphaned_uploaded = 0
+        for video_id, file_path in uploaded_videos:
+            if not os.path.exists(file_path):
+                print(f"Cleaning up orphaned uploaded video {video_id}: {file_path}")
+                cursor.execute('DELETE FROM uploaded_videos WHERE id = ?', (video_id,))
+                # Also clean up related processed videos
+                cursor.execute('DELETE FROM processed_videos WHERE uploaded_video_id = ?', (video_id,))
+                orphaned_uploaded += 1
+        
+        # Clean up orphaned processed videos (files don't exist)
+        cursor.execute('SELECT id, file_path FROM processed_videos')
+        processed_videos = cursor.fetchall()
+        
+        orphaned_processed = 0
+        for video_id, file_path in processed_videos:
+            if not os.path.exists(file_path):
+                print(f"Cleaning up orphaned processed video {video_id}: {file_path}")
+                cursor.execute('DELETE FROM processed_videos WHERE id = ?', (video_id,))
+                orphaned_processed += 1
+        
+        conn.commit()
+        total_cleaned = corrupted_uploaded + corrupted_processed + duplicate_uploaded + orphaned_uploaded + orphaned_processed
+        print(f"Database cleanup completed: {total_cleaned} entries removed")
+        
+    except Exception as e:
+        print(f"Error during database cleanup: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
+
 @app.route('/')
 def index():
     """Main page with video interface"""
@@ -280,6 +350,52 @@ def upload():
 def library():
     """Video library page"""
     return render_template('library.html')
+
+@app.route('/debug')
+def debug():
+    """Debug page for database inspection"""
+    return render_template('debug.html')
+
+@app.route('/api/debug/stats')
+def debug_stats():
+    """Get database statistics for debug page"""
+    try:
+        conn = sqlite3.connect('video_analysis.db')
+        cursor = conn.cursor()
+        
+        # Get counts
+        cursor.execute('SELECT COUNT(*) FROM uploaded_videos')
+        uploaded_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM processed_videos')
+        processed_count = cursor.fetchone()[0]
+        
+        cursor.execute('SELECT COUNT(*) FROM cameras')
+        camera_count = cursor.fetchone()[0]
+        
+        # Get total file size
+        cursor.execute('SELECT SUM(file_size) FROM uploaded_videos WHERE file_size IS NOT NULL')
+        total_size = cursor.fetchone()[0] or 0
+        
+        # Get database file info
+        db_path = 'video_analysis.db'
+        db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+        
+        conn.close()
+        
+        return jsonify({
+            'uploaded_videos': uploaded_count,
+            'processed_videos': processed_count,
+            'cameras': camera_count,
+            'total_size_mb': round(total_size / 1024 / 1024, 2),
+            'database_size_kb': round(db_size / 1024, 2),
+            'timestamp': datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 
 @app.route('/api/cameras', methods=['GET'])
 def get_cameras():
@@ -393,6 +509,7 @@ def get_uploaded_videos():
             uv.id,
             uv.original_filename,
             uv.stored_filename,
+            uv.file_path,
             uv.duration,
             uv.fps,
             uv.frame_count,
@@ -406,7 +523,16 @@ def get_uploaded_videos():
             pv.processing_duration,
             pv.processed_at
         FROM uploaded_videos uv
-        LEFT JOIN processed_videos pv ON uv.id = pv.uploaded_video_id
+        LEFT JOIN (
+            SELECT pv1.*
+            FROM processed_videos pv1
+            INNER JOIN (
+                SELECT uploaded_video_id, MAX(processed_at) as max_processed_at
+                FROM processed_videos
+                GROUP BY uploaded_video_id
+            ) pv2 ON pv1.uploaded_video_id = pv2.uploaded_video_id 
+                   AND pv1.processed_at = pv2.max_processed_at
+        ) pv ON uv.id = pv.uploaded_video_id
         ORDER BY uv.uploaded_at DESC
     ''')
     videos = cursor.fetchall()
@@ -418,23 +544,24 @@ def get_uploaded_videos():
             'id': video[0],
             'original_filename': video[1],
             'stored_filename': video[2],
-            'duration': video[3],
-            'fps': video[4],
-            'frame_count': video[5],
-            'width': video[6],
-            'height': video[7],
-            'file_size': video[8],
-            'uploaded_at': video[9],
-            'has_processed_version': video[10] is not None
+            'file_path': video[3],
+            'duration': video[4],
+            'fps': video[5],
+            'frame_count': video[6],
+            'width': video[7],
+            'height': video[8],
+            'file_size': video[9],
+            'uploaded_at': video[10],
+            'has_processed_version': video[11] is not None
         }
         
-        if video[10]:  # If processed version exists
+        if video[11]:  # If processed version exists
             video_data['processed'] = {
-                'id': video[10],
-                'filename': video[11],
-                'depersonalized': video[12],
-                'processing_duration': video[13],
-                'processed_at': video[14]
+                'id': video[11],
+                'filename': video[12],
+                'depersonalized': video[13],
+                'processing_duration': video[14],
+                'processed_at': video[15]
             }
         
         video_list.append(video_data)
@@ -450,6 +577,7 @@ def get_processed_videos():
         SELECT 
             pv.id,
             pv.processed_filename,
+            pv.file_path,
             pv.depersonalized,
             pv.processing_duration,
             pv.processed_at,
@@ -472,16 +600,17 @@ def get_processed_videos():
         video_list.append({
             'id': video[0],
             'filename': video[1],
-            'depersonalized': bool(video[2]),
-            'processing_duration': video[3],
-            'processed_at': video[4],
-            'original_filename': video[5],
-            'duration': video[6],
-            'fps': video[7],
-            'frame_count': video[8],
-            'width': video[9],
-            'height': video[10],
-            'file_size': video[11]
+            'file_path': video[2],
+            'depersonalized': bool(video[3]),
+            'processing_duration': video[4],
+            'processed_at': video[5],
+            'original_filename': video[6],
+            'duration': video[7],
+            'fps': video[8],
+            'frame_count': video[9],
+            'width': video[10],
+            'height': video[11],
+            'file_size': video[12]
         })
     
     return jsonify(video_list)
@@ -503,18 +632,28 @@ def delete_processed_video(video_id):
         
         file_path = video_record[0]
         
-        # Delete file
+        # Delete file with better error handling
+        deleted_file = None
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+                deleted_file = file_path
+                print(f"Deleted processed video file: {file_path}")
+            except Exception as file_error:
+                print(f"Warning: Could not delete file {file_path}: {file_error}")
         
         # Delete database record
         cursor.execute('DELETE FROM processed_videos WHERE id = ?', (video_id,))
         conn.commit()
         conn.close()
         
-        return jsonify({'success': True})
+        return jsonify({
+            'success': True,
+            'deleted_file': deleted_file
+        })
         
     except Exception as e:
+        print(f"Error deleting processed video {video_id}: {e}")
         conn.close()
         return jsonify({'error': str(e)}), 500
 
@@ -539,13 +678,24 @@ def delete_uploaded_video(video_id):
         cursor.execute('SELECT processed_filename, file_path FROM processed_videos WHERE uploaded_video_id = ?', (video_id,))
         processed_videos = cursor.fetchall()
         
-        # Delete files
+        # Delete files with better error handling
+        deleted_files = []
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+                deleted_files.append(file_path)
+                print(f"Deleted uploaded video file: {file_path}")
+            except Exception as file_error:
+                print(f"Warning: Could not delete file {file_path}: {file_error}")
         
         for processed_filename, processed_file_path in processed_videos:
             if os.path.exists(processed_file_path):
-                os.remove(processed_file_path)
+                try:
+                    os.remove(processed_file_path)
+                    deleted_files.append(processed_file_path)
+                    print(f"Deleted processed video file: {processed_file_path}")
+                except Exception as file_error:
+                    print(f"Warning: Could not delete file {processed_file_path}: {file_error}")
         
         # Delete from database
         cursor.execute('DELETE FROM processed_videos WHERE uploaded_video_id = ?', (video_id,))
@@ -554,9 +704,17 @@ def delete_uploaded_video(video_id):
         conn.commit()
         conn.close()
         
-        return jsonify({'success': True, 'message': 'Video deleted successfully'})
+        # Clean up any orphaned entries
+        cleanup_orphaned_entries()
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Video deleted successfully',
+            'deleted_files': deleted_files
+        })
         
     except Exception as e:
+        print(f"Error deleting uploaded video {video_id}: {e}")
         conn.close()
         return jsonify({'error': f'Error deleting video: {str(e)}'}), 500
 
@@ -654,6 +812,49 @@ def upload_video():
         stored_filename = f"upload_{timestamp}_{original_filename}"
         filepath = os.path.join(upload_dir, stored_filename)
         
+        # Check if this exact file was already uploaded (anytime, not just recent)
+        conn = sqlite3.connect('video_analysis.db')
+        cursor = conn.cursor()
+        
+        # First check by original filename
+        cursor.execute('''
+            SELECT id, stored_filename FROM uploaded_videos 
+            WHERE original_filename = ?
+        ''', (original_filename,))
+        
+        existing_by_name = cursor.fetchone()
+        if existing_by_name:
+            conn.close()
+            return jsonify({'error': 'This file was already uploaded. Please use the existing video.'}), 400
+        
+        # Read file content for more thorough duplicate detection
+        file_content = file.read()
+        file.seek(0)  # Reset file pointer for later use
+        
+        # Check by file size (more reliable than just filename)
+        cursor.execute('''
+            SELECT id, original_filename, stored_filename FROM uploaded_videos 
+            WHERE file_size = ?
+        ''', (len(file_content),))
+        
+        existing_by_size = cursor.fetchone()
+        if existing_by_size:
+            conn.close()
+            return jsonify({'error': f'A file with identical content was already uploaded as "{existing_by_size[2]}". Please use the existing video.'}), 400
+        
+        # Additional check: look for files with same content hash (first 1KB)
+        content_hash = hashlib.md5(file_content[:1024]).hexdigest()
+        cursor.execute('''
+            SELECT id, original_filename, stored_filename FROM uploaded_videos 
+            WHERE file_size = ? AND original_filename = ?
+        ''', (len(file_content), original_filename))
+        
+        if cursor.fetchone():
+            conn.close()
+            return jsonify({'error': 'This exact file content was already uploaded. Please use the existing video.'}), 400
+        
+        conn.close()
+        
         # Save the file
         file.save(filepath)
         
@@ -706,9 +907,27 @@ def process_video():
     if not filename:
         return jsonify({'error': 'No filename provided'}), 400
     
+    # Check if video is already being processed
+    if filename in processing_lock and processing_lock[filename]:
+        return jsonify({'error': 'Video is already being processed. Please wait.'}), 400
+    
+    # Set processing lock
+    processing_lock[filename] = True
+    
     # Find the uploaded video in database
     conn = sqlite3.connect('video_analysis.db')
     cursor = conn.cursor()
+    
+    # Check if video is already processed
+    cursor.execute('''
+        SELECT p.id FROM processed_videos p
+        JOIN uploaded_videos u ON p.uploaded_video_id = u.id
+        WHERE u.stored_filename = ?
+    ''', (filename,))
+    
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'error': 'This video has already been processed. Check the video library for the processed version.'}), 400
     cursor.execute('SELECT id, file_path FROM uploaded_videos WHERE stored_filename = ?', (filename,))
     video_record = cursor.fetchone()
     
@@ -747,6 +966,15 @@ def process_video():
         frame_count = 0
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
+        # Initialize progress tracking
+        processing_progress[filename] = {
+            'status': 'processing',
+            'progress': 0,
+            'frame_count': 0,
+            'total_frames': total_frames,
+            'message': 'Starting video processing...'
+        }
+        
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -764,36 +992,37 @@ def process_video():
             # Progress update every 10 frames
             if frame_count % 10 == 0:
                 progress = (frame_count / total_frames) * 100
+                processing_progress[filename].update({
+                    'progress': progress,
+                    'frame_count': frame_count,
+                    'message': f'Processing frame {frame_count}/{total_frames} ({progress:.1f}%)'
+                })
                 print(f"Processing: {progress:.1f}%")
         
         cap.release()
         out.release()
         
-        # Ensure video compatibility using FFmpeg if available
-        try:
-            import subprocess
-            # Convert to H.264 with web-compatible settings
-            temp_output = output_path.replace('.mp4', '_temp.mp4')
-            os.rename(output_path, temp_output)
-            
-            ffmpeg_cmd = [
-                'ffmpeg', '-i', temp_output,
-                '-c:v', 'libx264',
-                '-preset', 'fast',
-                '-crf', '23',
-                '-c:a', 'aac',
-                '-movflags', '+faststart',
-                '-y', output_path
-            ]
-            
-            subprocess.run(ffmpeg_cmd, check=True, capture_output=True)
-            os.remove(temp_output)
-            print(f"Video converted to web-compatible format: {output_path}")
-        except (subprocess.CalledProcessError, FileNotFoundError, ImportError) as e:
-            print(f"FFmpeg conversion failed, using original video: {e}")
-            # If FFmpeg fails, rename temp file back
-            if os.path.exists(temp_output):
-                os.rename(temp_output, output_path)
+        # Update progress to completed
+        processing_progress[filename].update({
+            'status': 'completed',
+            'progress': 100,
+            'message': 'Video processing completed!'
+        })
+        
+        # Clean up progress tracking after a delay to prevent memory leaks
+        def cleanup_progress():
+            if filename in processing_progress:
+                del processing_progress[filename]
+                print(f"Cleaned up progress tracking for: {filename}")
+        
+        # Schedule cleanup after 30 seconds
+        import threading
+        timer = threading.Timer(30.0, cleanup_progress)
+        timer.start()
+        
+        # Skip FFmpeg transcoding to avoid video corruption
+        # The processed video will be saved directly in OpenCV format
+        print(f"Video processing completed, saved as: {output_path}")
         
         # Calculate processing duration
         processing_duration = time.time() - start_time
@@ -809,6 +1038,10 @@ def process_video():
         conn.commit()
         conn.close()
         
+        # Release processing lock
+        if filename in processing_lock:
+            del processing_lock[filename]
+        
         return jsonify({
             'success': True,
             'processed_video_id': processed_video_id,
@@ -818,10 +1051,30 @@ def process_video():
             'depersonalized': enable_depersonalization,
             'processing_duration': processing_duration
         })
-        
+    
     except Exception as e:
-        conn.close()
-        return jsonify({'error': f'Error processing video: {str(e)}'}), 500
+        print(f"Error processing video: {e}")
+        # Release processing lock on error
+        if filename in processing_lock:
+            del processing_lock[filename]
+        return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
+@app.route('/api/process-video-progress/<filename>')
+def process_video_progress(filename):
+    """Get real-time progress of video processing"""
+    print(f"Progress request for: {filename}")
+    print(f"Available progress keys: {list(processing_progress.keys())}")
+    
+    if filename in processing_progress:
+        progress_data = processing_progress[filename]
+        print(f"Returning progress: {progress_data}")
+        return jsonify(progress_data)
+    else:
+        print(f"No progress found for: {filename}")
+        return jsonify({
+            'status': 'not_found',
+            'message': 'No processing found for this video'
+        })
 
 @app.route('/api/uploaded-video/<filename>')
 def serve_uploaded_video(filename):
@@ -829,6 +1082,9 @@ def serve_uploaded_video(filename):
     response = send_from_directory('static/uploads', filename)
     response.headers['Content-Type'] = 'video/mp4'
     response.headers['Accept-Ranges'] = 'bytes'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
     return response
 
 @app.route('/api/processed-video/<filename>')
@@ -837,7 +1093,19 @@ def serve_processed_video(filename):
     response = send_from_directory('static/processed', filename)
     response.headers['Content-Type'] = 'video/mp4'
     response.headers['Accept-Ranges'] = 'bytes'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
     return response
+
+@app.route('/api/cleanup-database', methods=['POST'])
+def api_cleanup_database():
+    """Manually trigger database cleanup"""
+    try:
+        cleanup_orphaned_entries()
+        return jsonify({'success': True, 'message': 'Database cleanup completed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     init_database()

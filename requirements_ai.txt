@@ -1,0 +1,22 @@
+# Advanced AI Video Processing Requirements
+# Install with: pip install -r requirements_ai.txt
+
+# Core ML/AI libraries
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0  # YOLOv8
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Advanced segmentation models
+segment-anything @ git+https://github.com/facebookresearch/segment-anything.git
+supervision>=0.16.0  # Advanced annotations and visualizations
+
+# Optional: GPU acceleration
+# torch-audio  # If you need audio processing
+# torch-scatter  # For advanced graph operations
+
+# Development tools
+matplotlib>=3.7.0  # For visualization
+pillow>=9.5.0     # Image processing
+tqdm>=4.65.0      # Progress bars

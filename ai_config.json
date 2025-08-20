@@ -1,0 +1,22 @@
+{
+  "yolo_model": "yolov8x-seg.pt",
+  "confidence_threshold": 0.5,
+  "iou_threshold": 0.45,
+  "person_only": true,
+  "blur_strength": 15,
+  "output_format": "mp4",
+  "save_intermediate": true,
+  "show_preview": false,
+  "advanced_options": {
+    "use_sam_refinement": false,
+    "mask_dilation": 2,
+    "blur_type": "gaussian",
+    "preserve_edges": true,
+    "adaptive_blur": true
+  },
+  "performance": {
+    "batch_size": 1,
+    "use_half_precision": false,
+    "optimize_memory": true
+  }
+}

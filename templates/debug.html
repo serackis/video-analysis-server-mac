@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Debug - Video Analysis Server</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-video me-2"></i>Video Analysis Server
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="nav navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">
+                            <i class="fas fa-home me-1"></i>Home
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/cameras">
+                            <i class="fas fa-camera me-1"></i>Cameras
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/upload">
+                            <i class="fas fa-upload me-1"></i>Upload & Process
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/library">
+                            <i class="fas fa-folder-open me-1"></i>Video Library
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/debug">
+                            <i class="fas fa-bug me-1"></i>Debug
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">
+                    <i class="fas fa-bug me-2"></i>Database Debug View
+                </h1>
+                <p class="text-muted mb-4">View all database records for debugging and troubleshooting</p>
+                
+                <!-- Action Buttons -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <button class="btn btn-primary me-2" onclick="refreshData()">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh Data
+                        </button>
+                        <button class="btn btn-warning me-2" onclick="cleanupDatabase()">
+                            <i class="fas fa-broom me-1"></i>Cleanup DB
+                        </button>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <span class="badge bg-info me-2">Last Updated: <span id="lastUpdated">Never</span></span>
+                        <span class="badge bg-secondary">Auto-refresh: <span id="autoRefreshStatus">Off</span></span>
+                    </div>
+                </div>
+
+                <!-- Database Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-upload text-primary me-2"></i>Uploaded Videos
+                                </h5>
+                                <h3 id="uploadedCount" class="text-primary">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-check text-success me-2"></i>Processed Videos
+                                </h5>
+                                <h3 id="processedCount" class="text-success">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-camera text-info me-2"></i>Cameras
+                                </h5>
+                                <h3 id="cameraCount" class="text-info">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-hdd text-warning me-2"></i>Total Size
+                                </h5>
+                                <h3 id="totalSize" class="text-warning">0 MB</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Uploaded Videos Table -->
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-upload me-2"></i>Uploaded Videos Table
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Original Filename</th>
+                                        <th>Stored Filename</th>
+                                        <th>File Path</th>
+                                        <th>Duration</th>
+                                        <th>FPS</th>
+                                        <th>Frame Count</th>
+                                        <th>Resolution</th>
+                                        <th>File Size</th>
+                                        <th>Uploaded At</th>
+                                        <th>Has Processed</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="uploadedVideosTable">
+                                    <tr>
+                                        <td colspan="12" class="text-center text-muted">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Processed Videos Table -->
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-check me-2"></i>Processed Videos Table
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Processed Filename</th>
+                                        <th>File Path</th>
+                                        <th>Uploaded Video ID</th>
+                                        <th>Depersonalized</th>
+                                        <th>Processing Duration</th>
+                                        <th>Processed At</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="processedVideosTable">
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cameras Table -->
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-camera me-2"></i>Cameras Table
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Name</th>
+                                        <th>URL</th>
+                                        <th>Type</th>
+                                        <th>Status</th>
+                                        <th>Created At</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="camerasTable">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File System Check -->
+                <div class="card mb-4">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">
+                            <i class="fas fa-folder-tree me-2"></i>File System Check
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Upload Directory</h6>
+                                <div id="uploadDirStatus" class="alert alert-info">Checking...</div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Processed Directory</h6>
+                                <div id="processedDirStatus" class="alert alert-info">Checking...</div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <h6>Thumbnails Directory</h6>
+                                <div id="thumbnailsDirStatus" class="alert alert-info">Checking...</div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Database File</h6>
+                                <div id="databaseStatus" class="alert alert-info">Checking...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let autoRefreshInterval = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Debug page loaded');
+            loadAllData();
+            startAutoRefresh();
+        });
+
+        // Load all data
+        async function loadAllData() {
+            try {
+                await Promise.all([
+                    loadUploadedVideos(),
+                    loadProcessedVideos(),
+                    loadCameras(),
+                    checkFileSystem()
+                ]);
+                
+                updateStatistics();
+                updateLastUpdated();
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showError('Failed to load data: ' + error.message);
+            }
+        }
+
+        // Load uploaded videos
+        async function loadUploadedVideos() {
+            try {
+                const response = await fetch('/api/uploaded-videos');
+                if (!response.ok) throw new Error('Failed to fetch uploaded videos');
+                
+                const videos = await response.json();
+                displayUploadedVideos(videos);
+                
+            } catch (error) {
+                console.error('Error loading uploaded videos:', error);
+                document.getElementById('uploadedVideosTable').innerHTML = `
+                    <tr><td colspan="12" class="text-center text-danger">Error: ${error.message}</td></tr>
+                `;
+            }
+        }
+
+        // Load processed videos
+        async function loadProcessedVideos() {
+            try {
+                const response = await fetch('/api/processed-videos');
+                if (!response.ok) throw new Error('Failed to fetch processed videos');
+                
+                const videos = await response.json();
+                displayProcessedVideos(videos);
+                
+            } catch (error) {
+                console.error('Error loading processed videos:', error);
+                document.getElementById('processedVideosTable').innerHTML = `
+                    <tr><td colspan="8" class="text-center text-danger">Error: ${error.message}</td></tr>
+                `;
+            }
+        }
+
+        // Load cameras
+        async function loadCameras() {
+            try {
+                const response = await fetch('/api/cameras');
+                if (!response.ok) throw new Error('Failed to fetch cameras');
+                
+                const cameras = await response.json();
+                displayCameras(cameras);
+                
+            } catch (error) {
+                console.error('Error loading cameras:', error);
+                document.getElementById('camerasTable').innerHTML = `
+                    <tr><td colspan="7" class="text-center text-danger">Error: ${error.message}</td></tr>
+                `;
+            }
+        }
+
+        // Display uploaded videos
+        function displayUploadedVideos(videos) {
+            const tbody = document.getElementById('uploadedVideosTable');
+            
+            if (videos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted">No uploaded videos found</td></tr>';
+                return;
+            }
+            
+            const rows = videos.map(video => `
+                <tr>
+                    <td><span class="badge bg-primary">${video.id}</span></td>
+                    <td><code>${video.original_filename || 'N/A'}</code></td>
+                    <td><code>${video.stored_filename || 'N/A'}</code></td>
+                    <td><small>${video.file_path || 'N/A'}</small></td>
+                    <td>${video.duration ? Math.round(video.duration) + 's' : 'N/A'}</td>
+                    <td>${video.fps ? video.fps.toFixed(1) : 'N/A'}</td>
+                    <td>${video.frame_count || 'N/A'}</td>
+                    <td>${video.width && video.height ? `${video.width}x${video.height}` : 'N/A'}</td>
+                    <td>${video.file_size ? (video.file_size / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}</td>
+                    <td><small>${video.uploaded_at ? new Date(video.uploaded_at).toLocaleString() : 'N/A'}</small></td>
+                    <td>
+                        ${video.has_processed_version ? 
+                            '<span class="badge bg-success">Yes</span>' : 
+                            '<span class="badge bg-secondary">No</span>'
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteVideo(${video.id}, 'uploaded')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            tbody.innerHTML = rows;
+        }
+
+        // Display processed videos
+        function displayProcessedVideos(videos) {
+            const tbody = document.getElementById('processedVideosTable');
+            
+            if (videos.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">No processed videos found</td></tr>';
+                return;
+            }
+            
+            const rows = videos.map(video => `
+                <tr>
+                    <td><span class="badge bg-success">${video.id}</span></td>
+                    <td><code>${video.filename || 'N/A'}</code></td>
+                    <td><small>${video.file_path || 'N/A'}</small></td>
+                    <td><span class="badge bg-primary">${video.uploaded_video_id || 'N/A'}</span></td>
+                    <td>
+                        ${video.depersonalized ? 
+                            '<span class="badge bg-warning">Yes</span>' : 
+                            '<span class="badge bg-secondary">No</span>'
+                        }
+                    </td>
+                    <td>${video.processing_duration ? Math.round(video.processing_duration) + 's' : 'N/A'}</td>
+                    <td><small>${video.processed_at ? new Date(video.processed_at).toLocaleString() : 'N/A'}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteVideo(${video.id}, 'processed')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            tbody.innerHTML = rows;
+        }
+
+        // Display cameras
+        function displayCameras(cameras) {
+            const tbody = document.getElementById('camerasTable');
+            
+            if (cameras.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No cameras found</td></tr>';
+                return;
+            }
+            
+            const rows = cameras.map(camera => `
+                <tr>
+                    <td><span class="badge bg-info">${camera.id}</span></td>
+                    <td><strong>${camera.name || 'N/A'}</strong></td>
+                    <td><code>${camera.url || 'N/A'}</code></td>
+                    <td><span class="badge bg-secondary">${camera.type || 'N/A'}</span></td>
+                    <td>
+                        ${camera.status === 'active' ? 
+                            '<span class="badge bg-success">Active</span>' : 
+                            '<span class="badge bg-danger">Inactive</span>'
+                        }
+                    </td>
+                    <td><small>${camera.created_at ? new Date(camera.created_at).toLocaleString() : 'N/A'}</small></td>
+                    <td>
+                        <button class="btn btn-sm btn-warning" onclick="toggleCamera(${camera.id})">
+                            <i class="fas fa-power-off"></i>
+                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteCamera(${camera.id})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            tbody.innerHTML = rows;
+        }
+
+        // Check file system
+        async function checkFileSystem() {
+            try {
+                // Check upload directory
+                const uploadResponse = await fetch('/api/uploaded-videos');
+                const uploadStatus = uploadResponse.ok ? 'Connected' : 'Error';
+                const uploadClass = uploadResponse.ok ? 'alert-success' : 'alert-danger';
+                document.getElementById('uploadDirStatus').className = `alert ${uploadClass}`;
+                document.getElementById('uploadDirStatus').textContent = `API Status: ${uploadStatus}`;
+
+                // Check processed directory
+                const processedResponse = await fetch('/api/processed-videos');
+                const processedStatus = processedResponse.ok ? 'Connected' : 'Error';
+                const processedClass = processedResponse.ok ? 'alert-success' : 'alert-danger';
+                document.getElementById('processedDirStatus').className = `alert ${processedClass}`;
+                document.getElementById('processedDirStatus').textContent = `API Status: ${processedStatus}`;
+
+                // Check thumbnails directory
+                document.getElementById('thumbnailsDirStatus').className = 'alert alert-info';
+                document.getElementById('thumbnailsDirStatus').textContent = 'Checking...';
+
+                // Check database
+                document.getElementById('databaseStatus').className = 'alert alert-info';
+                document.getElementById('databaseStatus').textContent = 'Checking...';
+
+            } catch (error) {
+                console.error('Error checking file system:', error);
+                showError('File system check failed: ' + error.message);
+            }
+        }
+
+        // Update statistics
+        function updateStatistics() {
+            const uploadedTable = document.getElementById('uploadedVideosTable');
+            const processedTable = document.getElementById('processedVideosTable');
+            const camerasTable = document.getElementById('camerasTable');
+            
+            const uploadedCount = uploadedTable.querySelectorAll('tr').length - 1; // Subtract header row
+            const processedCount = processedTable.querySelectorAll('tr').length - 1;
+            const cameraCount = camerasTable.querySelectorAll('tr').length - 1;
+            
+            if (uploadedCount < 0) document.getElementById('uploadedCount').textContent = '0';
+            else document.getElementById('uploadedCount').textContent = uploadedCount;
+            
+            if (processedCount < 0) document.getElementById('processedCount').textContent = '0';
+            else document.getElementById('processedCount').textContent = processedCount;
+            
+            if (cameraCount < 0) document.getElementById('cameraCount').textContent = '0';
+            else document.getElementById('cameraCount').textContent = cameraCount;
+            
+            // Calculate total size
+            let totalSize = 0;
+            const sizeCells = uploadedTable.querySelectorAll('td:nth-child(9)');
+            sizeCells.forEach(cell => {
+                const text = cell.textContent;
+                if (text.includes('MB')) {
+                    const size = parseFloat(text.replace(' MB', ''));
+                    if (!isNaN(size)) totalSize += size;
+                }
+            });
+            
+            document.getElementById('totalSize').textContent = totalSize.toFixed(2) + ' MB';
+        }
+
+        // Update last updated timestamp
+        function updateLastUpdated() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = now.toLocaleString();
+        }
+
+        // Refresh data
+        function refreshData() {
+            console.log('Refreshing data...');
+            loadAllData();
+        }
+
+        // Start auto-refresh
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                document.getElementById('autoRefreshStatus').textContent = 'Off';
+                return;
+            }
+            
+            autoRefreshInterval = setInterval(() => {
+                loadAllData();
+            }, 10000); // Refresh every 10 seconds
+            
+            document.getElementById('autoRefreshStatus').textContent = 'On (10s)';
+        }
+
+        // Cleanup database
+        async function cleanupDatabase() {
+            try {
+                const response = await fetch('/api/cleanup-database', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess('Database cleanup completed!');
+                    loadAllData(); // Refresh data
+                } else {
+                    showError('Database cleanup failed: ' + (result.error || 'Unknown error'));
+                }
+                
+            } catch (error) {
+                console.error('Error cleaning up database:', error);
+                showError('Error cleaning up database: ' + error.message);
+            }
+        }
+
+        // Delete video
+        async function deleteVideo(videoId, type) {
+            if (!confirm(`Are you sure you want to delete this ${type} video?`)) {
+                return;
+            }
+            
+            try {
+                const endpoint = type === 'processed' ? '/api/processed-videos/' : '/api/uploaded-videos/';
+                const response = await fetch(endpoint + videoId, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    showSuccess(`${type} video deleted successfully!`);
+                    loadAllData(); // Refresh data
+                } else {
+                    const error = await response.json();
+                    showError(`Failed to delete ${type} video: ${error.error || 'Unknown error'}`);
+                }
+                
+            } catch (error) {
+                console.error(`Error deleting ${type} video:`, error);
+                showError(`Error deleting ${type} video: ` + error.message);
+            }
+        }
+
+        // Toggle camera
+        async function toggleCamera(cameraId) {
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/toggle`, { method: 'POST' });
+                
+                if (response.ok) {
+                    showSuccess('Camera status toggled!');
+                    loadAllData(); // Refresh data
+                } else {
+                    showError('Failed to toggle camera status');
+                }
+                
+            } catch (error) {
+                console.error('Error toggling camera:', error);
+                showError('Error toggling camera: ' + error.message);
+            }
+        }
+
+        // Delete camera
+        async function deleteCamera(cameraId) {
+            if (!confirm('Are you sure you want to delete this camera?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}`, { method: 'DELETE' });
+                
+                if (response.ok) {
+                    showSuccess('Camera deleted successfully!');
+                    loadAllData(); // Refresh data
+                } else {
+                    showError('Failed to delete camera');
+                }
+                
+            } catch (error) {
+                console.error('Error deleting camera:', error);
+                showError('Error deleting camera: ' + error.message);
+            }
+        }
+
+        // Show success message
+        function showSuccess(message) {
+            // Create a simple toast notification
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            toast.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(toast);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 3000);
+        }
+
+        // Show error message
+        function showError(message) {
+            // Create a simple toast notification
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            toast.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(toast);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
