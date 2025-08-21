@@ -162,3 +162,104 @@ static/uploads/
 # Database files
 video_analysis.db
 *.db
+
+# AI Models and Large Files
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.pb
+*.h5
+*.hdf5
+*.weights
+*.cfg
+*.names
+*.txt
+
+# YOLO specific models
+yolo*.pt
+yolo*.pth
+yolo*.weights
+yolo*.cfg
+yolo*.names
+
+# Ultralytics cache and models
+.ultralytics/
+runs/
+*.pt
+
+# Model directories
+models/
+weights/
+checkpoints/
+
+# Large data files
+*.pkl
+*.pickle
+*.joblib
+*.npy
+*.npz
+
+# Processing output directories
+accuracy_comparison/
+enhanced_blur_test/
+batch_processed/
+tracked_*.mp4
+enhanced_blur_*.mp4
+*_processed.mp4
+
+# Tracking data files
+tracked_*.json
+enhanced_blur_stats.json
+accuracy_comparison_report.txt
+
+# Additional AI/ML files
+*.safetensors
+*.bin
+*.gguf
+*.ggml
+*.ggla
+*.ggjt
+*.ggjf
+*.ggjv
+*.ggjq
+*.ggjr
+*.ggjs
+*.ggjt
+*.ggju
+*.ggjv
+*.ggjw
+*.ggjx
+*.ggjy
+*.ggjz
+
+# Cache directories
+.cache/
+cache/
+__pycache__/
+*.pyc
+
+# Large media files (already covered but more specific)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.wmv
+*.flv
+*.webm
+*.m4v
+*.3gp
+*.ogv
+*.mp3
+*.wav
+*.aac
+*.ogg
+*.flac
+*.wma
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
