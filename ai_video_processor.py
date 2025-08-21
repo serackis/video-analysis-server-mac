@@ -50,7 +50,7 @@ class AdvancedVideoProcessor:
     def _default_config(self) -> Dict:
         """Default configuration for the processor"""
         return {
-            'yolo_model': 'yolov8x-seg.pt',  # YOLOv8 with segmentation
+            'yolo_model': 'yolov8n.pt',  # YOLOv8 nano (smaller, faster)
             'confidence_threshold': 0.5,
             'iou_threshold': 0.45,
             'person_only': True,  # Focus on person detection
@@ -66,13 +66,12 @@ class AdvancedVideoProcessor:
         
         # Load YOLO model
         try:
-            if 'ultralytics' in globals():
-                self.models['yolo'] = YOLO(self.config['yolo_model'])
-                print(f"✅ Loaded YOLO model: {self.config['yolo_model']}")
-            else:
-                print("❌ YOLO not available")
+            print(f"🔄 Loading YOLO model: {self.config['yolo_model']}")
+            self.models['yolo'] = YOLO(self.config['yolo_model'])
+            print(f"✅ Loaded YOLO model: {self.config['yolo_model']}")
         except Exception as e:
             print(f"❌ Failed to load YOLO: {e}")
+            self.models['yolo'] = None
         
         # Load SAM model (if available)
         try:
@@ -120,7 +119,7 @@ class AdvancedVideoProcessor:
         out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
         
         # Processing statistics
-        stats = {
+        self.stats = {
             'total_frames': total_frames,
             'processed_frames': 0,
             'persons_detected': 0,
@@ -144,7 +143,7 @@ class AdvancedVideoProcessor:
                 
                 # Write processed frame
                 out.write(processed_frame)
-                stats['processed_frames'] += 1
+                self.stats['processed_frames'] += 1
                 
                 # Show preview if enabled
                 if self.config['show_preview']:
@@ -160,15 +159,15 @@ class AdvancedVideoProcessor:
             cv2.destroyAllWindows()
             
             # Calculate final statistics
-            stats['processing_time'] = time.time() - stats['start_time']
-            stats['fps_processing'] = stats['processed_frames'] / stats['processing_time']
+            self.stats['processing_time'] = time.time() - self.stats['start_time']
+            self.stats['fps_processing'] = self.stats['processed_frames'] / self.stats['processing_time']
             
-            self._print_statistics(stats)
+            self._print_statistics(self.stats)
             
             # Save statistics
             stats_file = Path(output_path).with_suffix('.json')
             with open(stats_file, 'w') as f:
-                json.dump(stats, f, indent=2)
+                json.dump(self.stats, f, indent=2)
             print(f"📊 Statistics saved to: {stats_file}")
         
         return str(output_path)
@@ -190,6 +189,11 @@ class AdvancedVideoProcessor:
     def _yolo_processing(self, frame: np.ndarray, frame_number: int) -> np.ndarray:
         """Process frame with YOLO detection and segmentation"""
         try:
+            # Check if YOLO model is available
+            if 'yolo' not in self.models or self.models['yolo'] is None:
+                print("⚠️  YOLO model not available, skipping processing")
+                return frame
+            
             # Run YOLO inference
             results = self.models['yolo'](
                 frame,
@@ -198,6 +202,9 @@ class AdvancedVideoProcessor:
                 verbose=False
             )
             
+            processed_frame = frame.copy()
+            persons_detected = 0
+            
             # Process results
             for result in results:
                 boxes = result.boxes
@@ -205,12 +212,15 @@ class AdvancedVideoProcessor:
                     for box in boxes:
                         # Check if it's a person (class 0 in COCO dataset)
                         if box.cls == 0:  # Person class
+                            persons_detected += 1
+                            
                             # Get bounding box coordinates
                             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
                             
-                            # Get segmentation mask if available
-                            if hasattr(box, 'masks') and box.masks is not None:
-                                mask = box.masks.data[0].cpu().numpy()
+                            # Check if we have segmentation masks
+                            if hasattr(result, 'masks') and result.masks is not None:
+                                # Get the mask for this detection
+                                mask = result.masks.data[0].cpu().numpy()
                                 mask = cv2.resize(mask, (frame.shape[1], frame.shape[0]))
                                 
                                 # Apply depersonalization using segmentation mask
@@ -222,6 +232,13 @@ class AdvancedVideoProcessor:
                                 processed_frame = self._apply_depersonalization_box(
                                     processed_frame, x1, y1, x2, y2
                                 )
+            
+            # Update statistics if available
+            if hasattr(self, 'stats'):
+                self.stats['persons_detected'] += persons_detected
+            
+            if persons_detected > 0:
+                print(f"👥 Frame {frame_number}: Detected {persons_detected} person(s)")
             
             return processed_frame
             
@@ -310,6 +327,10 @@ def main():
     if config is None:
         config = {}
     
+    # Create a copy of the default config and override with command line args
+    processor = AdvancedVideoProcessor()
+    config = processor.config.copy()
+    
     config.update({
         'confidence_threshold': args.confidence,
         'iou_threshold': args.iou,
@@ -317,7 +338,7 @@ def main():
         'show_preview': args.preview
     })
     
-    # Create processor and process video
+    # Create processor with updated config
     processor = AdvancedVideoProcessor(config)
     
     try:
