@@ -57,6 +57,8 @@ class FaceDetectionDepersonalizer:
                 self._init_face_detection()
             elif self.method == "opencv_dnn":
                 self._init_opencv_dnn()
+            elif self.method == "retinaface":
+                self._init_retinaface()
             else:
                 raise ValueError(f"Unsupported method: {self.method}")
             
@@ -94,24 +96,45 @@ class FaceDetectionDepersonalizer:
         """Initialize face-detection library (RetinaNet)"""
         import face_detection
         
-        self.detector = face_detection.build_detector(
-            "RetinaNetResNet50", 
-            confidence_threshold=self.config['confidence_threshold'],
-            nms_iou_threshold=0.3
-        )
+        try:
+            # Try ResNet50 first
+            self.detector = face_detection.build_detector(
+                "RetinaNetResNet50", 
+                confidence_threshold=self.config['confidence_threshold'],
+                nms_iou_threshold=0.3
+            )
+        except Exception as e:
+            logger.warning(f"RetinaNetResNet50 failed: {e}")
+            try:
+                # Fallback to MobileNet
+                logger.info("Trying RetinaNetMobileNetV1 as fallback...")
+                self.detector = face_detection.build_detector(
+                    "RetinaNetMobileNetV1", 
+                    confidence_threshold=self.config['confidence_threshold'],
+                    nms_iou_threshold=0.3
+                )
+            except Exception as e2:
+                logger.error(f"All RetinaNet models failed: {e2}")
+                raise RuntimeError("RetinaNet models are currently unavailable. Please use MediaPipe or Haar Cascade instead.")
     
     def _init_opencv_dnn(self):
         """Initialize OpenCV DNN face detector (YuNet)"""
-        model_path = "face_detection_yunet_2022mar.onnx"
+        model_path = "face_detection_yunet_2023mar.onnx"
         
         # Download model if not exists
         if not os.path.exists(model_path):
             logger.info("Downloading YuNet face detection model...")
             import urllib.request
-            url = "https://github.com/opencv/opencv_zoo/raw/master/models/face_detection_yunet/face_detection_yunet_2022mar.onnx"
+            # Use the working URL from media.githubusercontent.com
+            url = "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
             urllib.request.urlretrieve(url, model_path)
         
         self.detector = cv2.FaceDetectorYN.create(model_path, "", (320, 320))
+    
+    def _init_retinaface(self):
+        """Initialize RetinaFace detector"""
+        from retinaface import RetinaFace
+        self.detector = RetinaFace
     
     def detect_faces(self, frame: np.ndarray) -> List[Tuple[int, int, int, int, float]]:
         """Detect faces in a frame using the selected method"""
@@ -123,6 +146,8 @@ class FaceDetectionDepersonalizer:
             return self._detect_face_detection(frame)
         elif self.method == "opencv_dnn":
             return self._detect_opencv_dnn(frame)
+        elif self.method == "retinaface":
+            return self._detect_retinaface(frame)
         else:
             raise ValueError(f"Unsupported method: {self.method}")
     
@@ -192,6 +217,34 @@ class FaceDetectionDepersonalizer:
                 results.append((int(x), int(y), int(w), int(h), confidence))
         
         return results
+    
+    def _detect_retinaface(self, frame: np.ndarray) -> List[Tuple[int, int, int, int, float]]:
+        """Detect faces using RetinaFace"""
+        # RetinaFace expects a file path, so we need to save the frame temporarily
+        temp_path = "temp_frame.jpg"
+        cv2.imwrite(temp_path, frame)
+        
+        try:
+            # Detect faces using RetinaFace
+            faces = self.detector.detect_faces(temp_path)
+            
+            results = []
+            for face_key, face_data in faces.items():
+                bbox = face_data['facial_area']
+                confidence = face_data['score']
+                
+                x, y, x2, y2 = bbox
+                width = x2 - x
+                height = y2 - y
+                
+                results.append((int(x), int(y), int(width), int(height), confidence))
+            
+            return results
+            
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
     
     def apply_depersonalization(self, frame: np.ndarray, faces: List[Tuple[int, int, int, int, float]]) -> np.ndarray:
         """Apply depersonalization to detected faces"""
@@ -364,7 +417,7 @@ def main():
     parser.add_argument('input_video', help='Input video file path')
     parser.add_argument('-o', '--output', help='Output video file path')
     parser.add_argument('-m', '--method', default='mediapipe', 
-                       choices=['haar_cascade', 'mediapipe', 'face_detection', 'opencv_dnn'],
+                       choices=['haar_cascade', 'mediapipe', 'face_detection', 'opencv_dnn', 'retinaface'],
                        help='Face detection method to use')
     parser.add_argument('-c', '--confidence', type=float, default=0.5, 
                        help='Detection confidence threshold')
